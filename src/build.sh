@@ -18,15 +18,16 @@ if [ "$named_down_hash" != "$named_hash" ]; then
     exit
 fi
 
-# mmdb
-git clone https://github.com/kkkgo/Country-only-cn-private.mmdb --depth 1 /Country-only-cn-private
-mmdb_hash=$(sha256sum /Country-only-cn-private/Country-only-cn-private.mmdb.xz | grep -Eo "[a-zA-Z0-9]{64}" | head -1)
-mmdb_down_hash=$(grep -Eo "[a-zA-Z0-9]{64}" /Country-only-cn-private/Country-only-cn-private.mmdb.xz.sha256sum | head -1)
+# mmdb (Loyalsoldier/geoip full GeoIP database)
+curl -sLo /tmp/Country.mmdb https://github.com/Loyalsoldier/geoip/releases/latest/download/Country.mmdb
+curl -sLo /tmp/Country.mmdb.sha256sum https://github.com/Loyalsoldier/geoip/releases/latest/download/Country.mmdb.sha256sum
+mmdb_hash=$(sha256sum /tmp/Country.mmdb | grep -Eo "[a-zA-Z0-9]{64}" | head -1)
+mmdb_down_hash=$(grep -Eo "[a-zA-Z0-9]{64}" /tmp/Country.mmdb.sha256sum | head -1)
 if [ "$mmdb_down_hash" != "$mmdb_hash" ]; then
     cp /mmdb_down_hash_error .
     exit
 else
-    cp /Country-only-cn-private/Country-only-cn-private.mmdb.xz /src/Country-only-cn-private.mmdb.xz
+    cp /tmp/Country.mmdb /src/Country.mmdb
 fi
 
 # mark_data

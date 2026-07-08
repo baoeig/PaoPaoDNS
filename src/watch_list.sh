@@ -109,7 +109,7 @@ reload_dns() {
         if [ -f /data/force_forward_list.txt ]; then
             mosdns eat list /tmp/force_forward_list.txt /data/force_forward_list.txt
         fi
-        if [ ! -f /data/Country-only-cn-private.mmdb ]; then
+        if [ ! -f /data/Country.mmdb ]; then
             /usr/sbin/data_update.sh ex_mmdb
         fi
         if [ "$(gen_hash /data/force_recurse_list.txt)" != "$force_recurse_list" ]; then
@@ -167,8 +167,8 @@ reload_dns() {
                 export reload_mosdns=1
             fi
         fi
-        if [ "$(gen_hash /data/Country-only-cn-private.mmdb)" != "$Country" ]; then
-            cat /data/Country-only-cn-private.mmdb >/tmp/Country.mmdb
+        if [ "$(gen_hash /data/Country.mmdb)" != "$Country" ]; then
+            cat /data/Country.mmdb >/tmp/Country.mmdb
             export reload_mosdns=1
         fi
         if [ $reload_mosdns = "1" ]; then
@@ -217,10 +217,10 @@ while true; do
         if [ ! -f /data/force_recurse_list.txt ]; then
             cp /usr/sbin/force_recurse_list.txt /data/
         fi
-        if [ ! -f /data/Country-only-cn-private.mmdb ]; then
+        if [ ! -f /data/Country.mmdb ]; then
             /usr/sbin/data_update.sh ex_mmdb
         fi
-        file_list=$file_list" /data/Country-only-cn-private.mmdb /data/force_recurse_list.txt /data/force_dnscrypt_list.txt /data/custom_env.ini"
+        file_list=$file_list" /data/Country.mmdb /data/force_recurse_list.txt /data/force_dnscrypt_list.txt /data/custom_env.ini"
         if [ -f /data/force_cn_list.txt ]; then
             file_list=$file_list" /data/force_cn_list.txt"
         fi
@@ -278,7 +278,7 @@ while true; do
         export trackerslist
         custom_cn_mark=$(gen_hash /data/custom_cn_mark.txt)
         export custom_cn_mark
-        Country=$(gen_hash /data/Country-only-cn-private.mmdb)
+        Country=$(gen_hash /data/Country.mmdb)
         export Country
         custom_env=$(gen_hash /data/custom_env.ini)
         export custom_env

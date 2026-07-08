@@ -35,7 +35,7 @@ if [ ! -f /new.lock ]; then
     rm -rf /data/unbound.conf >/dev/null 2>&1
     rm -rf /data/mosdns.yaml >/dev/null 2>&1
     rm -rf /data/dnscrypt.toml >/dev/null 2>&1
-    rm -rf /data/Country-only-cn-private.mmdb >/dev/null 2>&1
+    rm -rf /data/Country.mmdb >/dev/null 2>&1
     rm -rf /data/global_mark.dat >/dev/null 2>&1
     rm -rf /data/dnscrypt-resolvers >/dev/null 2>&1
     touch /new.lock
@@ -294,10 +294,10 @@ if [ "$CNAUTO" != "no" ]; then
     if [ ! -f /data/mosdns.yaml ]; then
         cp /usr/sbin/mosdns.yaml /data/
     fi
-    if [ ! -f /data/Country-only-cn-private.mmdb ]; then
+    if [ ! -f /data/Country.mmdb ]; then
         /usr/sbin/data_update.sh ex_mmdb
     fi
-    cat /data/Country-only-cn-private.mmdb >/tmp/Country.mmdb
+    cat /data/Country.mmdb >/tmp/Country.mmdb
     if [ ! -f /data/dnscrypt.toml ]; then
         cp /usr/sbin/dnscrypt.toml /data/
     fi

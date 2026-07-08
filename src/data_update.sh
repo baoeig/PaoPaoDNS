@@ -16,12 +16,7 @@ comp_trackerslist() {
 }
 
 ex_mmdb() {
-    mkdir -p /tmp/mmdb
-    cp /usr/sbin/Country-only-cn-private.mmdb.xz /tmp/mmdb/
-    cd /tmp/mmdb/ || exit
-    xz -df Country-only-cn-private.mmdb.xz
-    cat /tmp/mmdb/Country-only-cn-private.mmdb >/data/Country-only-cn-private.mmdb
-    rm -rf /tmp/mmdb/
+    cp /usr/sbin/Country.mmdb /data/Country.mmdb
     return 0
 }
 
@@ -114,30 +109,25 @@ file_update_try
 redis-cli -s /tmp/redis.sock info | grep used_memory_human
 
 if [ "$CNAUTO" != "no" ]; then
-    update_file="/usr/sbin/Country-only-cn-private.mmdb.xz"
-    update_file_down="/tmp/Country-only-cn-private.mmdb"
-    update_flag="Country-only-cn-private.flag"
-    update_file_wait="/data/Country-only-cn-private.mmdb"
+    update_file="/usr/sbin/Country.mmdb"
+    update_file_down="/tmp/Country.mmdb.download"
+    update_flag="Country.flag"
+    update_file_wait="/data/Country.mmdb"
     update_reg="[0-9A-Za-z]{64}"
     hashcmd="sha256sum"
-    newsum_url=https://raw.githubusercontent.com/kkkgo/Country-only-cn-private.mmdb/main/Country-only-cn-private.mmdb.xz.sha256sum
-    down_url=https://raw.githubusercontent.com/kkkgo/Country-only-cn-private.mmdb/main/Country-only-cn-private.mmdb.xz
+    newsum_url=https://github.com/Loyalsoldier/geoip/releases/latest/download/Country.mmdb.sha256sum
+    down_url=https://github.com/Loyalsoldier/geoip/releases/latest/download/Country.mmdb
     file_update_try
     if [ "$?" = "1" ]; then
-        newsum_url=https://cdn.jsdelivr.net/gh/kkkgo/Country-only-cn-private.mmdb/Country-only-cn-private.mmdb.xz.sha256sum
-        down_url=https://cdn.jsdelivr.net/gh/kkkgo/Country-only-cn-private.mmdb/Country-only-cn-private.mmdb.xz
+        newsum_url=https://cdn.jsdelivr.net/gh/Loyalsoldier/geoip@release/Country.mmdb.sha256sum
+        down_url=https://cdn.jsdelivr.net/gh/Loyalsoldier/geoip@release/Country.mmdb
         file_update_try failed
-        if [ "$?" = "1" ]; then
-            newsum_url=https://cdn.statically.io/gh/kkkgo/Country-only-cn-private.mmdb/main/Country-only-cn-private.mmdb.xz.sha256sum
-            down_url=https://cdn.statically.io/gh/kkkgo/Country-only-cn-private.mmdb/main/Country-only-cn-private.mmdb.xz
-            file_update_try failed
-        fi
     fi
-    if [ -f /tmp/Country-only-cn-private.flag ]; then
-        update_file_wait="/data/Country-only-cn-private.mmdb"
+    if [ -f /tmp/Country.flag ]; then
+        update_file_wait="/data/Country.mmdb"
         wait_apply
         ex_mmdb
-        rm /tmp/Country-only-cn-private.flag
+        rm /tmp/Country.flag
     fi
 fi
 
