@@ -59,6 +59,12 @@ plugins:
 #global_mark_yes        - "/tmp/global_mark_cn.dat"
 #global_mark_yes        - "/tmp/custom_cn_mark.txt"
 
+#route_gfwlist  - tag: "gfwlist"
+#route_gfwlist    type: "domain_set"
+#route_gfwlist    args:
+#route_gfwlist      files:
+#route_gfwlist        - "/tmp/gfwlist.txt"
+
 #customforward-seted  - tag: "force_forward_list"
 #customforward-seted    type: "domain_set"
 #customforward-seted    args:
@@ -235,6 +241,23 @@ plugins:
 #route_foreign_first          exec: goto accept
 #route_foreign_first        - exec: pongerr END by f_cn_default.
 
+#route_gfwlist  - tag: f_cn_default
+#route_gfwlist    type: sequence
+#route_gfwlist    args:
+#route_gfwlist        - exec: drop_resp
+#route_gfwlist#nofall        - exec: $local_unbound
+#route_gfwlist#cn_recurse_yes#cnfall        - exec: $local_unbound_fall
+#route_gfwlist#nofall#route_log        - matches: has_wanted_ans
+#route_gfwlist#nofall#route_log          exec: query_summary route_gfwlist_cn_local_unbound
+#route_gfwlist#cn_recurse_yes#cnfall#route_log        - matches: has_wanted_ans
+#route_gfwlist#cn_recurse_yes#cnfall#route_log          exec: query_summary route_gfwlist_cn_local_unbound_fall
+#route_gfwlist#cn_recurse_yes#cnfall        - matches: "!rcode 0"
+#route_gfwlist#cn_recurse_yes#cnfall          exec: jump try_cn_fall
+#route_gfwlist#cn_recurse_no#cnfall        - exec: jump try_cn_fall
+#route_gfwlist        - matches: has_wanted_ans
+#route_gfwlist          exec: goto accept
+#route_gfwlist        - exec: pongerr END by f_cn_default.
+
 #route_foreign_first#autoforward-yes#autoforward-check  - tag: try_foreign_first_check
 #route_foreign_first#autoforward-yes#autoforward-check    type: sequence
 #route_foreign_first#autoforward-yes#autoforward-check    args:
@@ -326,6 +349,18 @@ plugins:
 #route_foreign_first#ipv6cn_only6          - qtype 28
 #route_foreign_first#ipv6cn_only6          exec: prefer_ipv4
 #route_foreign_first        - exec: goto f_cn_default
+
+#route_gfwlist#autoforward-yes        - matches: qname $gfwlist
+#route_gfwlist#autoforward-yes          exec: goto f_force_forward_list
+#route_gfwlist#autoforward-no        - matches: qname $gfwlist
+#route_gfwlist#autoforward-no          exec: goto f_force_dnscrypt_list
+#route_gfwlist#ipv6yes        - matches:
+#route_gfwlist#ipv6yes          - qtype 28
+#route_gfwlist#ipv6yes          exec: pong END by IPv6=yes, gfwlist block aaaa.
+#route_gfwlist#ipv6cn_only6        - matches:
+#route_gfwlist#ipv6cn_only6          - qtype 28
+#route_gfwlist#ipv6cn_only6          exec: prefer_ipv4
+#route_gfwlist        - exec: goto f_cn_default
 
 #route_cn_first#global_mark_yes        - matches: qname $global_mark
 #route_cn_first#global_mark_yes          exec: jump f_global_mark

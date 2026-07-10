@@ -44,6 +44,110 @@ if [ "$1" = "load_mark_data" ]; then
     exit
 fi
 
+download_gfwlist() {
+    tmp="/tmp/gfwlist.txt.download"
+    rm -f "$tmp"
+    for url in \
+        "https://raw.githubusercontent.com/gfwlist/gfwlist/master/gfwlist.txt" \
+        "https://cdn.jsdelivr.net/gh/gfwlist/gfwlist/gfwlist.txt" \
+        "https://gitlab.com/gfwlist/gfwlist/-/raw/master/gfwlist.txt"; do
+        if echo "$SOCKS5" | grep -Eoq ":[0-9]+"; then
+            /usr/sbin/mosdns curl "$url" "$SOCKS5" "$tmp"
+        fi
+        if [ ! -s "$tmp" ]; then
+            rm -f "$tmp"
+            /usr/sbin/mosdns curl "$url" "$tmp"
+        fi
+        if [ ! -s "$tmp" ] && command -v wget >/dev/null 2>&1; then
+            rm -f "$tmp"
+            wget -T 30 -q -O "$tmp" "$url"
+        fi
+        if [ -s "$tmp" ]; then
+            if base64 -d "$tmp" >/tmp/gfwlist.decode_test 2>/dev/null || grep -Eq "^(\\[|!|@@|\\|\\|)" "$tmp"; then
+                cat "$tmp" >/data/gfwlist.txt
+                rm -f /tmp/gfwlist.decode_test
+                return 0
+            fi
+        fi
+        rm -f "$tmp" /tmp/gfwlist.decode_test
+    done
+    return 1
+}
+
+load_gfwlist() {
+    raw="/data/gfwlist.txt"
+    decoded="/tmp/gfwlist.decoded"
+    output="/tmp/gfwlist.txt"
+    mkdir -p /data
+    if [ ! -s "$raw" ]; then
+        download_gfwlist
+    fi
+    if [ ! -f "$raw" ]; then
+        touch "$raw"
+    fi
+    if [ -s "$raw" ]; then
+        if ! base64 -d "$raw" >"$decoded" 2>/dev/null; then
+            cat "$raw" >"$decoded"
+        fi
+        awk '
+        function trim(s) {
+            gsub(/^[ \t]+|[ \t]+$/, "", s)
+            return s
+        }
+        function emit(host) {
+            host = tolower(host)
+            gsub(/\r/, "", host)
+            sub(/^[a-z][a-z0-9+.-]*:\/\//, "", host)
+            sub(/^\|\|/, "", host)
+            sub(/^\|/, "", host)
+            sub(/^\*\./, "", host)
+            sub(/^\.+/, "", host)
+            sub(/[\/\^\$:?#].*/, "", host)
+            while (host ~ /^[^a-z0-9]+/) {
+                host = substr(host, 2)
+            }
+            while (host ~ /[^a-z0-9]+$/) {
+                host = substr(host, 1, length(host) - 1)
+            }
+            if (host ~ /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/ && host !~ /^[0-9.]+$/) {
+                print "domain:" host
+            }
+        }
+        {
+            line = trim($0)
+            if (line == "" || line ~ /^!/ || line ~ /^\[/ || line ~ /^@@/) {
+                next
+            }
+            sub(/\$.*/, "", line)
+            gsub(/\\\./, ".", line)
+            if (line ~ /^\|\|/) {
+                emit(line)
+                next
+            }
+            sub(/^\|/, "", line)
+            gsub(/^\*+/, "", line)
+            gsub(/^\.+/, "", line)
+            if (line ~ /^[a-z][a-z0-9+.-]*:\/\//) {
+                emit(line)
+                next
+            }
+            if (match(line, /([A-Za-z0-9-]+\.)+[A-Za-z][A-Za-z]+/)) {
+                emit(substr(line, RSTART, RLENGTH))
+            }
+        }' "$decoded" | sort -u >"$output"
+        rm -f "$decoded"
+    fi
+    if [ ! -f "$output" ]; then
+        touch "$output"
+    fi
+    echo "Apply gfwlist: $(wc -l <"$output") domains."
+}
+
+if [ "$1" = "load_gfwlist" ]; then
+    load_gfwlist
+    exit
+fi
+
 load_ttl_rules() {
     touch /tmp/force_ttl_rules.txt
     touch /tmp/force_ttl_rules.toml
@@ -133,6 +237,12 @@ reload_dns() {
         if [ "$CN_TRACKER" = "yes" ]; then
             if [ "$(gen_hash /data/trackerslist.txt)" != "$trackerslist" ]; then
                 load_trackerslist
+                export reload_mosdns=1
+            fi
+        fi
+        if [ "$ROUTE_MODE" = "gfwlist" ]; then
+            if [ "$(gen_hash /data/gfwlist.txt)" != "$gfwlist" ]; then
+                load_gfwlist
                 export reload_mosdns=1
             fi
         fi
@@ -246,6 +356,12 @@ while true; do
             fi
             file_list=$file_list" /data/trackerslist.txt"
         fi
+        if [ "$ROUTE_MODE" = "gfwlist" ]; then
+            if [ ! -f /data/gfwlist.txt ]; then
+                load_gfwlist
+            fi
+            file_list=$file_list" /data/gfwlist.txt"
+        fi
         if echo "$CUSTOM_FORWARD" | grep -Eoq ":[0-9]+"; then
             file_list=$file_list" /data/force_forward_list.txt"
             if [ ! -f /data/force_forward_list.txt ]; then
@@ -276,6 +392,8 @@ while true; do
         export force_ttl_rules
         trackerslist=$(gen_hash /data/trackerslist.txt)
         export trackerslist
+        gfwlist=$(gen_hash /data/gfwlist.txt)
+        export gfwlist
         custom_cn_mark=$(gen_hash /data/custom_cn_mark.txt)
         export custom_cn_mark
         Country=$(gen_hash /data/Country.mmdb)

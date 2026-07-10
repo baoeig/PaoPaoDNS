@@ -39,9 +39,10 @@ fi
 if [ -z "$CN_RECURSE" ]; then
     CN_RECURSE=yes
 fi
-if [ "$ROUTE_MODE" != "foreign_first" ]; then
-    ROUTE_MODE=cn_first
-fi
+case "$ROUTE_MODE" in
+foreign_first | gfwlist) ;;
+*) ROUTE_MODE=cn_first ;;
+esac
 
 # Step 1: Generate /tmp/mosdns.yaml from template based on SOCKS5 setting
 if echo "$SOCKS5" | grep -Eoq ":[0-9]+"; then
@@ -111,11 +112,18 @@ fi
 if [ "$AUTO_FORWARD" = "no" ]; then
     sed -i "s/#autoforward-no//g" /tmp/mosdns.yaml
 fi
-if [ "$ROUTE_MODE" = "foreign_first" ]; then
+case "$ROUTE_MODE" in
+foreign_first)
     sed -i "s/#route_foreign_first//g" /tmp/mosdns.yaml
-else
+    ;;
+gfwlist)
+    /usr/sbin/watch_list.sh load_gfwlist
+    sed -i "s/#route_gfwlist//g" /tmp/mosdns.yaml
+    ;;
+*)
     sed -i "s/#route_cn_first//g" /tmp/mosdns.yaml
-fi
+    ;;
+esac
 
 # CN_TRACKER
 if [ "$CN_TRACKER" = "yes" ]; then

@@ -93,6 +93,53 @@ file_update_try() {
     fi
 }
 
+download_gfwlist_update() {
+    url=$1
+    if echo "$SOCKS5" | grep -Eoq ":[0-9]+"; then
+        mosdns curl "$url" "$SOCKS5" "$update_file_down"
+    fi
+    if [ ! -s "$update_file_down" ]; then
+        rm -f "$update_file_down"
+        mosdns curl "$url" "$update_file_down"
+    fi
+    if [ ! -s "$update_file_down" ] && command -v wget >/dev/null 2>&1; then
+        rm -f "$update_file_down"
+        wget -T 30 -q -O "$update_file_down" "$url"
+    fi
+}
+
+update_gfwlist() {
+    update_file="/data/gfwlist.txt"
+    update_file_down="/tmp/gfwlist.txt.download"
+    update_file_wait=$update_file
+    touch "$update_file"
+    for url in \
+        "https://raw.githubusercontent.com/gfwlist/gfwlist/master/gfwlist.txt" \
+        "https://cdn.jsdelivr.net/gh/gfwlist/gfwlist/gfwlist.txt" \
+        "https://gitlab.com/gfwlist/gfwlist/-/raw/master/gfwlist.txt"; do
+        rm -f "$update_file_down" /tmp/gfwlist.decode_test
+        download_gfwlist_update "$url"
+        if [ -s "$update_file_down" ]; then
+            if base64 -d "$update_file_down" >/tmp/gfwlist.decode_test 2>/dev/null || grep -Eq "^(\\[|!|@@|\\|\\|)" "$update_file_down"; then
+                oldsum=$(md5sum "$update_file" | grep -Eo "[0-9a-f]{32}" | head -1)
+                newsum=$(md5sum "$update_file_down" | grep -Eo "[0-9a-f]{32}" | head -1)
+                if [ "$newsum" = "$oldsum" ]; then
+                    echo "$update_file Same hash, skip update."
+                    rm -f "$update_file_down" /tmp/gfwlist.decode_test
+                    return 0
+                fi
+                echo "$update_file update from $url"
+                wait_apply
+                cat "$update_file_down" >"$update_file"
+                rm -f "$update_file_down" /tmp/gfwlist.decode_test
+                return 0
+            fi
+        fi
+    done
+    rm -f "$update_file_down" /tmp/gfwlist.decode_test
+    return 1
+}
+
 update-ca-certificates >/dev/null 2>&1
 apk update >/dev/null 2>&1
 apk add --upgrade ca-certificates >/dev/null 2>&1
@@ -182,5 +229,12 @@ if [ "$CNAUTO" != "no" ]; then
                 file_update_try failed
             fi
         fi
+    fi
+fi
+
+# Update gfwlist data
+if [ "$CNAUTO" != "no" ]; then
+    if [ "$ROUTE_MODE" = "gfwlist" ]; then
+        update_gfwlist
     fi
 fi

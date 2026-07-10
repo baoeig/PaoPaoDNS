@@ -66,6 +66,8 @@ ROUTE_LABELS = {
     'route_foreign_first_cn_local_unbound': '国外优先 -> 国内本地递归 5301',
     'route_foreign_first_cn_local_unbound_fall': '国外优先 -> 国内本地递归 5301',
     'route_foreign_first_custom_forward': '国外优先 -> CUSTOM_FORWARD',
+    'route_gfwlist_cn_local_unbound': 'gfwlist -> 国内本地递归 5301',
+    'route_gfwlist_cn_local_unbound_fall': 'gfwlist -> 国内本地递归 5301',
     'route_not_a_aaaa_local_unbound': '非 A/AAAA: 本地递归 5301',
     'route_not_a_aaaa_forward_unbound': '非 A/AAAA: 转发递归 5304',
 }
@@ -99,7 +101,7 @@ TOGGLE_SETTINGS = [
     {'key': 'CN_RECURSE', 'label': 'CN本地递归', 'desc': 'CNFALL=yes 时先尝试本地递归 5301；根递归不通时建议关闭，直接走公共 DNS 回退', 'values': ['yes', 'no']},
     {'key': 'AUTO_FORWARD', 'label': '自动转发', 'desc': '自动转发非CN域名到CUSTOM_FORWARD', 'values': ['yes', 'no']},
     {'key': 'AUTO_FORWARD_CHECK', 'label': '转发检查', 'desc': '自动转发前检查域名是否为CN', 'values': ['yes', 'no']},
-    {'key': 'ROUTE_MODE', 'label': '分流模式', 'desc': 'cn_first=先按国内解析判断；foreign_first=先匹配国外域名规则，未命中一律走国内', 'values': ['cn_first', 'foreign_first']},
+    {'key': 'ROUTE_MODE', 'label': '分流模式', 'desc': 'cn_first=先按国内解析判断；foreign_first=先匹配国外域名规则，未命中一律走国内；gfwlist=先匹配 gfwlist，未命中一律走国内', 'values': ['cn_first', 'foreign_first', 'gfwlist']},
     {'key': 'USE_MARK_DATA', 'label': '预分类数据', 'desc': '使用预分类域名数据库加速分流', 'values': ['yes', 'no']},
     {'key': 'CN_TRACKER', 'label': 'Tracker分流', 'desc': 'BT Tracker域名走非CN解析', 'values': ['yes', 'no']},
     {'key': 'IPV6', 'label': 'IPv6模式', 'desc': 'IPv6处理策略', 'values': ['no', 'yes', 'only6', 'yes_only6']},
