@@ -47,6 +47,90 @@ sliamb/paopaodns
 - 示例： `docker pull public.ecr.aws/sliamb/paopaodns`  
 - 示例： `docker run -d public.ecr.aws/sliamb/paopaodns`  
 
+### 部署并启用gfwlist模式
+如果你希望使用`ROUTE_MODE=gfwlist`，建议同时映射管理后台端口，方便后续查看查询日志、切换配置和重载mosdns。
+
+新部署示例：
+```shell
+docker pull sliamb/paopaodns:latest
+docker run -d \
+--name paopaodns \
+-v /home/mydata:/data \
+-e CNAUTO=yes \
+-e ROUTE_MODE=gfwlist \
+-e ADMIN_PANEL=yes \
+--restart always \
+-p 53:53/tcp -p 53:53/udp \
+-p 8080:8080/tcp \
+sliamb/paopaodns:latest
+```
+
+如果使用`AUTO_FORWARD`配合旁路网关或fake-ip DNS，可以这样部署：
+```shell
+docker run -d \
+--name paopaodns \
+-v /home/mydata:/data \
+-e CNAUTO=yes \
+-e ROUTE_MODE=gfwlist \
+-e AUTO_FORWARD=yes \
+-e CUSTOM_FORWARD=***.***.*.**** \
+-e ADMIN_PANEL=yes \
+--restart always \
+-p 53:53/tcp -p 53:53/udp \
+-p 8080:8080/tcp \
+sliamb/paopaodns:latest
+```
+其中`CUSTOM_FORWARD=***.***.*.****`需要替换成你的旁路网关、代理DNS或fake-ip DNS地址。
+
+docker compose示例：
+```yaml
+services:
+  paopaodns:
+    image: sliamb/paopaodns:latest
+    container_name: paopaodns
+    restart: always
+    volumes:
+      - /home/mydata:/data
+    environment:
+      CNAUTO: "yes"
+      ROUTE_MODE: "gfwlist"
+      ADMIN_PANEL: "yes"
+      # AUTO_FORWARD: "yes"
+      # CUSTOM_FORWARD: "***.***.*.****"
+    ports:
+      - "53:53/tcp"
+      - "53:53/udp"
+      - "8080:8080/tcp"
+```
+
+已有容器升级到支持`gfwlist`的版本：
+```shell
+docker pull sliamb/paopaodns:latest
+docker stop paopaodns
+docker rm paopaodns
+docker run -d \
+--name paopaodns \
+-v /home/mydata:/data \
+-e CNAUTO=yes \
+-e ROUTE_MODE=gfwlist \
+-e ADMIN_PANEL=yes \
+--restart always \
+-p 53:53/tcp -p 53:53/udp \
+-p 8080:8080/tcp \
+sliamb/paopaodns:latest
+```
+升级时保留原来的`/data`挂载目录即可保留缓存和自定义列表；如果你原来还有`SOCKS5`、`SERVER_IP`、`CUSTOM_FORWARD`等环境变量，需要在新`docker run`或compose里一并带上。
+
+容器启动后访问`http://宿主机IP:8080`打开管理后台，在“分流模式”确认当前值为`gfwlist`。首次启用会自动下载`/data/gfwlist.txt`，并生成`/tmp/gfwlist.txt`供mosdns匹配。
+
+部署后可以这样验证：
+```shell
+docker exec paopaodns sh -lc 'wc -l /tmp/gfwlist.txt; grep -Fx "domain:google.com" /tmp/gfwlist.txt'
+dig +time=3 +tries=1 @127.0.0.1 google.com A
+dig +time=3 +tries=1 @127.0.0.1 baidu.com A
+```
+在管理后台“查询日志”里，`google.com`这类命中gfwlist的域名应显示为`CUSTOM_FORWARD`或加密DNS链路；`baidu.com`以及不在gfwlist内的域名应显示为国内链路。
+
 
 验证你的递归DNS正常运行(假设你的容器IP是192.168.1.8)，可以执行以下命令：   
 ```cmd
