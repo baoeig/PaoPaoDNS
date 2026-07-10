@@ -30,7 +30,10 @@ RUN cp /src/Country.mmdb /tmp/ &&\
     cp /src/custom_env.ini /tmp/ &&\
     cp /src/trackerslist.txt.xz /tmp/ &&\
     cp /src/watch_list.sh /tmp/ &&\
-    cp /src/redis-server /tmp/
+    cp /src/redis-server /tmp/ &&\
+    cp /src/admin_server.py /tmp/ &&\
+    cp /src/admin.html /tmp/ &&\
+    cp /src/regen_mosdns.sh /tmp/
 # build binary check
 RUN apk add --no-cache hiredis libevent libgcc && apk upgrade --no-cache
 RUN if /src/mosdns version|grep kkkgo;then echo mosdns_check > /mosdns_check;else cp /mosdns_check /tmp/;fi
@@ -41,7 +44,7 @@ FROM alpine:edge
 COPY --from=builder /src/ /usr/sbin/
 RUN apk update && \
     apk upgrade --no-cache && \
-    apk add --no-cache ca-certificates dcron tzdata hiredis libevent dnscrypt-proxy inotify-tools bind-tools libgcc xz && \
+    apk add --no-cache ca-certificates dcron tzdata hiredis libevent dnscrypt-proxy inotify-tools bind-tools libgcc xz python3 py3-flask py3-redis && \
     mkdir -p /etc/unbound && \
     mv /usr/sbin/named.cache /etc/unbound/named.cache && \
     adduser -D -H unbound && \
@@ -55,6 +58,8 @@ ENV TZ=Asia/Shanghai \
     DNSPORT=53 \
     CNAUTO=yes \
     CNFALL=yes \
+    CN_RECURSE=yes \
+    CNFALL_QTIME=3 \
     CN_TRACKER=yes \
     USE_HOSTS=no \
     IPV6=no \
@@ -64,14 +69,16 @@ ENV TZ=Asia/Shanghai \
     CUSTOM_FORWARD_TTL=0 \
     AUTO_FORWARD=no \
     AUTO_FORWARD_CHECK=yes \
+    ROUTE_MODE=cn_first \
     USE_MARK_DATA=yes \
     RULES_TTL=0 \
     HTTP_FILE=no \
     QUERY_TIME=2000ms \
     ADDINFO=no \
     SHUFFLE=no \
-    EXPIRED_FLUSH=yes
+    EXPIRED_FLUSH=yes \
+    ADMIN_PANEL=yes
 VOLUME /data
 WORKDIR /data
-EXPOSE 53/udp 53/tcp 5304/udp 5304/tcp 7889/tcp
+EXPOSE 53/udp 53/tcp 5304/udp 5304/tcp 7889/tcp 8080/tcp
 CMD /usr/sbin/init.sh

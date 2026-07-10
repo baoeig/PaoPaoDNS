@@ -193,11 +193,25 @@ ETHIP=$(ip -o -4 route get 1.0.0.1 | grep -Eo "$IPREX4" | tail -1)
 if [ -z "$ETHIP" ]; then
     ETHIP="127.0.0.2"
 fi
+if [ "$SERVER_IP" = "auto" ]; then
+    SERVER_IP="$ETHIP"
+    echo "SERVER_IP auto detected: $SERVER_IP"
+fi
 if [ -z "$DNS_SERVERNAME" ]; then
     DNS_SERVERNAME="PaoPaoDNS,blog.03k.org"
 fi
 if [ -z "$DNSPORT" ]; then
     DNSPORT="53"
+fi
+CNFALL_QTIME=$(echo "$CNFALL_QTIME" | grep -Eo "^[0-9]+$" | head -1)
+if [ -z "$CNFALL_QTIME" ]; then
+    CNFALL_QTIME=3
+fi
+if [ -z "$CN_RECURSE" ]; then
+    CN_RECURSE=yes
+fi
+if [ "$ROUTE_MODE" != "foreign_first" ]; then
+    ROUTE_MODE=cn_first
 fi
 export no_proxy=""
 export http_proxy=""
@@ -220,9 +234,12 @@ echo SOCKS5:-"$SOCKS5""-" >>/tmp/env.conf
 echo CNAUTO:-"$CNAUTO""-" >>/tmp/env.conf
 echo IPV6:-"$IPV6""-" >>/tmp/env.conf
 echo CNFALL:-"$CNFALL""-" >>/tmp/env.conf
+echo CN_RECURSE:-"$CN_RECURSE""-" >>/tmp/env.conf
+echo CNFALL_QTIME:-"$CNFALL_QTIME""-" >>/tmp/env.conf
 echo CUSTOM_FORWARD:-"$CUSTOM_FORWARD""-" >>/tmp/env.conf
 echo AUTO_FORWARD:-"$AUTO_FORWARD""-" >>/tmp/env.conf
 echo AUTO_FORWARD_CHECK:-"$AUTO_FORWARD_CHECK""-" >>/tmp/env.conf
+echo ROUTE_MODE:-"$ROUTE_MODE""-" >>/tmp/env.conf
 echo USE_MARK_DATA:-"$USE_MARK_DATA""-" >>/tmp/env.conf
 echo RULES_TTL:-"$RULES_TTL""-" >>/tmp/env.conf
 echo CUSTOM_FORWARD_TTL:-"$CUSTOM_FORWARD_TTL""-" >>/tmp/env.conf
@@ -234,6 +251,7 @@ echo HTTP_FILE:-"$HTTP_FILE""-" >>/tmp/env.conf
 echo SAFEMODE:-"$SAFEMODE""-" >>/tmp/env.conf
 echo QUERY_TIME:-"$QUERY_TIME""-" >>/tmp/env.conf
 echo ADDINFO:-"$ADDINFO""-" >>/tmp/env.conf
+echo ADMIN_PANEL:-"$ADMIN_PANEL""-" >>/tmp/env.conf
 echo PLATFORM:-"$(uname -a)""-" >>/tmp/env.conf
 echo ====ENV TEST==== >>/tmp/env.conf
 echo mosdns "$(mosdns version)" >>/tmp/env.conf
@@ -268,7 +286,7 @@ if [ "$safemem" = "no" ]; then
 else
     sed -i "s/#lowrmem//g" /tmp/unbound.conf
 fi
-if echo "$SERVER_IP" | grep -Eoq "[.0-9]+"; then
+if echo "$SERVER_IP" | grep -Eoq "^$IPREX4$"; then
     sed -i "s/{SERVER_IP}/$SERVER_IP/g" /tmp/unbound.conf
     sed -i "s/#serverip-enable//g" /tmp/unbound.conf
 fi
@@ -340,6 +358,13 @@ if [ "$CNAUTO" != "no" ]; then
     fi
     if [ "$CNFALL" = "yes" ]; then
         sed -i "s/#cnfall//g" /tmp/mosdns.yaml
+        sed -i "s/{CNFALL_QTIME}/$CNFALL_QTIME/g" /tmp/mosdns.yaml
+        sed -i "s/qtime: [0-9][0-9]*/qtime: $CNFALL_QTIME/g" /tmp/mosdns.yaml
+        if [ "$CN_RECURSE" = "no" ]; then
+            sed -i "s/#cn_recurse_no//g" /tmp/mosdns.yaml
+        else
+            sed -i "s/#cn_recurse_yes//g" /tmp/mosdns.yaml
+        fi
         if [ "$EXPIRED_FLUSH" = "yes" ]; then
             sed -i "s/#flushd_un_yes//g" /tmp/mosdns.yaml
         fi
@@ -377,6 +402,11 @@ if [ "$CNAUTO" != "no" ]; then
     if [ "$AUTO_FORWARD" = "no" ]; then
         sed -i "s/#autoforward-no//g" /tmp/mosdns.yaml
     fi
+    if [ "$ROUTE_MODE" = "foreign_first" ]; then
+        sed -i "s/#route_foreign_first//g" /tmp/mosdns.yaml
+    else
+        sed -i "s/#route_cn_first//g" /tmp/mosdns.yaml
+    fi
     if [ "$CN_TRACKER" = "yes" ]; then
         sed -i "s/#cntracker-yes//g" /tmp/mosdns.yaml
         /usr/sbin/watch_list.sh load_trackerslist
@@ -408,7 +438,7 @@ if [ "$CNAUTO" != "no" ]; then
         sed -i "s/#usehosts-yes//g" /tmp/mosdns.yaml
         sed -i "s/#usehosts-enable//g" /tmp/mosdns.yaml
     fi
-    if echo "$SERVER_IP" | grep -Eoq "[.0-9]+"; then
+    if echo "$SERVER_IP" | grep -Eoq "^$IPREX4$"; then
         sed -i "s/#usehosts-yes//g" /tmp/mosdns.yaml
         sed -i "s/#serverip-enable//g" /tmp/mosdns.yaml
         sed -i "s/{SERVER_IP}/$SERVER_IP/g" /tmp/mosdns.yaml
@@ -445,6 +475,14 @@ if [ "$CNAUTO" != "no" ]; then
     if [ "$HTTP_FILE" = "yes" ]; then
         sed -i "s/#http_file_yes//g" /tmp/mosdns.yaml
     fi
+    if [ "$ADMIN_PANEL" != "no" ]; then
+        sed -i "s/#admin_log//g" /tmp/mosdns.yaml
+        sed -i "s/#route_log//g" /tmp/mosdns.yaml
+        sed -i "s/{MOSDNS_LISTEN_PORT}/5353/g" /tmp/mosdns.yaml
+    else
+        sed -i "s/#admin_nolog//g" /tmp/mosdns.yaml
+        sed -i "s/{MOSDNS_LISTEN_PORT}/53/g" /tmp/mosdns.yaml
+    fi
     sed -i "s/{MSCACHE}/$MSCACHE/g" /tmp/mosdns.yaml
     dnscrypt-proxy -config /data/dnscrypt-resolvers/dnscrypt.toml >/dev/null 2>&1 &
     dnscrypt-proxy -config /data/dnscrypt-resolvers/dnscrypt_socks.toml >/dev/null 2>&1 &
@@ -474,6 +512,9 @@ echo "nameserver 1.0.0.1" >>/etc/resolv.conf
 /usr/sbin/watch_list.sh &
 if [ "$UPDATE" != "no" ]; then
     /usr/sbin/data_update.sh &
+fi
+if [ "$ADMIN_PANEL" != "no" ]; then
+    python3 /usr/sbin/admin_server.py &
 fi
 ps
 tail -f /dev/null

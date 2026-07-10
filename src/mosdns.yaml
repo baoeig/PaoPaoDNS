@@ -1,6 +1,8 @@
 log:
-    file: ""
-    level: error
+#admin_log    file: "/tmp/mosdns.log"
+#admin_log    level: info
+#admin_nolog    file: ""
+#admin_nolog    level: error
 
 plugins:
 
@@ -68,7 +70,7 @@ plugins:
 #cnfall    args:
 #cnfall      concurrent: 3
 #cnfall      upstreams:
-#cnfall        - addr: "udp://127.0.0.1:5301"
+#cn_recurse_yes#cnfall        - addr: "udp://127.0.0.1:5301"
 #cnfall        - addr: "udp://223.5.5.5"
 #cnfall        - addr: "udp://119.29.29.29"
 
@@ -82,7 +84,7 @@ plugins:
 #cnfall  - tag: local_unbound_fall
 #cnfall    type: forward
 #cnfall    args:
-#cnfall      qtime: 3
+#cnfall      qtime: {CNFALL_QTIME}
 #flushd_un_yes#cnfall      flush: 1
 #cnfall      upstreams:
 #cnfall        - addr: "udp://127.0.0.1:5301"
@@ -129,11 +131,15 @@ plugins:
     args:
         - exec: $local_unbound
 #addinfo        - exec: addinfo not_a_aaaa -> local_unbound
+#route_log        - matches: has_wanted_ans
+#route_log          exec: query_summary route_not_a_aaaa_local_unbound
         - matches: has_wanted_ans
           exec: goto accept
         - exec: drop_resp
         - exec: $forward_unbound
 #addinfo        - exec: addinfo not_a_aaaa -> forward_unbound
+#route_log        - matches: has_wanted_ans
+#route_log          exec: query_summary route_not_a_aaaa_forward_unbound
         - matches: has_wanted_ans
           exec: goto accept
         - exec: drop_resp
@@ -145,6 +151,7 @@ plugins:
 #customforward-seted        - exec: $force_forward
 #addinfo#customforward-seted        - exec: addinfo forward -> {CUSTOM_FORWARD_SERVER}@{CUSTOM_FORWARD_PORT}
 #CUSTOM_FORWARD_TTL#customforward-seted        - exec: ttl {CUSTOM_FORWARD_TTL}-0
+#route_log#customforward-seted        - exec: query_summary route_custom_forward
 #customforward-seted        - exec: goto accept
 
   - tag: f_force_dnscrypt_list
@@ -157,10 +164,14 @@ plugins:
         - exec: $forward_unbound
 
 #addinfo        - exec: addinfo nocn forward_unbound
+#route_log        - matches: has_wanted_ans
+#route_log          exec: query_summary route_force_dnscrypt_forward_unbound
         - matches: has_wanted_ans
           exec: goto accept
         - exec: $forward_dnscrypt
 #addinfo        - exec: addinfo nocn forward_dnscrypt
+#route_log        - matches: has_wanted_ans
+#route_log          exec: query_summary route_force_dnscrypt_dnscrypt
         - matches: has_wanted_ans
           exec: goto accept
         - exec: pongerr END by f_force_dnscrypt_list.
@@ -170,6 +181,8 @@ plugins:
     args:
         - exec: $local_unbound
 #addinfo        - exec: addinfo local_unbound
+#route_log        - matches: has_wanted_ans
+#route_log          exec: query_summary route_force_recurse_local_unbound
         - matches: has_wanted_ans
           exec: goto accept
         - exec: pongerr END by f_local_unbound.
@@ -188,6 +201,8 @@ plugins:
 #cnfall        - exec: drop_resp
 #cnfall        - exec: $cn_test
 #cnfall#addinfo        - exec: addinfo try_cn_fall
+#cnfall#route_log        - matches: has_wanted_ans
+#cnfall#route_log          exec: query_summary route_cn_fall_public
 
 #autoforward-yes#autoforward-check  - tag: try_auto_check
 #autoforward-yes#autoforward-check    type: sequence
@@ -195,11 +210,45 @@ plugins:
 #autoforward-yes#autoforward-check        - exec: drop_resp
 #autoforward-yes#autoforward-check        - exec: $forward_unbound
 #addinfo#autoforward-yes#autoforward-check        - exec: addinfo AUTO_FORWARD_CHECK forward_unbound PRIVATE
+#route_log#autoforward-yes#autoforward-check        - matches: resp_ip_mmdb $cnip PRIVATE
+#route_log#autoforward-yes#autoforward-check          exec: query_summary route_auto_check_private
 #autoforward-yes#autoforward-check        - matches: resp_ip_mmdb $cnip PRIVATE
 #autoforward-yes#autoforward-check          exec: goto accept
 #autoforward-yes#autoforward-check        - matches: "has_wanted_ans"
 #autoforward-yes#autoforward-check          exec: goto f_force_forward_list
 #autoforward-yes#autoforward-check        - exec: pongerr END by try_auto_check.
+
+#route_foreign_first  - tag: f_cn_default
+#route_foreign_first    type: sequence
+#route_foreign_first    args:
+#route_foreign_first        - exec: drop_resp
+#route_foreign_first#nofall        - exec: $local_unbound
+#route_foreign_first#cn_recurse_yes#cnfall        - exec: $local_unbound_fall
+#route_foreign_first#nofall#route_log        - matches: has_wanted_ans
+#route_foreign_first#nofall#route_log          exec: query_summary route_foreign_first_cn_local_unbound
+#route_foreign_first#cn_recurse_yes#cnfall#route_log        - matches: has_wanted_ans
+#route_foreign_first#cn_recurse_yes#cnfall#route_log          exec: query_summary route_foreign_first_cn_local_unbound_fall
+#route_foreign_first#cn_recurse_yes#cnfall        - matches: "!rcode 0"
+#route_foreign_first#cn_recurse_yes#cnfall          exec: jump try_cn_fall
+#route_foreign_first#cn_recurse_no#cnfall        - exec: jump try_cn_fall
+#route_foreign_first        - matches: has_wanted_ans
+#route_foreign_first          exec: goto accept
+#route_foreign_first        - exec: pongerr END by f_cn_default.
+
+#route_foreign_first#autoforward-yes#autoforward-check  - tag: try_foreign_first_check
+#route_foreign_first#autoforward-yes#autoforward-check    type: sequence
+#route_foreign_first#autoforward-yes#autoforward-check    args:
+#route_foreign_first#autoforward-yes#autoforward-check        - exec: drop_resp
+#route_foreign_first#autoforward-yes#autoforward-check        - exec: $forward_unbound
+#route_foreign_first#autoforward-yes#autoforward-check        - matches: resp_ip_mmdb $cnip PRIVATE
+#route_foreign_first#autoforward-yes#autoforward-check          exec: goto f_cn_default
+#route_foreign_first#autoforward-yes#autoforward-check        - matches: resp_ip_mmdb $cnip CN
+#route_foreign_first#autoforward-yes#autoforward-check          exec: goto f_cn_default
+#route_foreign_first#autoforward-yes#autoforward-check#route_log        - matches: has_wanted_ans
+#route_foreign_first#autoforward-yes#autoforward-check#route_log          exec: query_summary route_foreign_first_custom_forward
+#route_foreign_first#autoforward-yes#autoforward-check        - matches: has_wanted_ans
+#route_foreign_first#autoforward-yes#autoforward-check          exec: goto f_force_forward_list
+#route_foreign_first#autoforward-yes#autoforward-check        - exec: goto f_cn_default
 
 #global_mark_yes  - tag: f_global_mark
 #global_mark_yes    type: sequence
@@ -266,36 +315,53 @@ plugins:
 ##zones_qname_list_start##
 ##zones_qname_list_end##
 
-#global_mark_yes        - matches: qname $global_mark
-#global_mark_yes          exec: jump f_global_mark
+#route_foreign_first#global_mark_yes#autoforward-yes        - matches: qname $global_mark
+#route_foreign_first#global_mark_yes#autoforward-yes          exec: goto f_force_forward_list
+#route_foreign_first#global_mark_yes#autoforward-no        - matches: qname $global_mark
+#route_foreign_first#global_mark_yes#autoforward-no          exec: goto f_force_dnscrypt_list
+#route_foreign_first#ipv6yes        - matches: 
+#route_foreign_first#ipv6yes          - qtype 28
+#route_foreign_first#ipv6yes          exec: pong END by IPv6=yes, foreign_first block aaaa.
+#route_foreign_first#ipv6cn_only6        - matches: 
+#route_foreign_first#ipv6cn_only6          - qtype 28
+#route_foreign_first#ipv6cn_only6          exec: prefer_ipv4
+#route_foreign_first        - exec: goto f_cn_default
 
-#nofall        - exec: $local_unbound
-#cnfall        - exec: $local_unbound_fall
-#cnfall        - matches: "!rcode 0"
-#cnfall          exec: jump try_cn_fall
-#global_mark_yes#addinfo        - exec: addinfo cn_mark
-#global_mark_yes        - matches: qname $cn_mark
-#global_mark_yes          exec: goto accept
-#addinfo        - exec: addinfo mmdb CN IP
-        - matches: resp_ip_mmdb $cnip CN
-          exec: goto accept
+#route_cn_first#global_mark_yes        - matches: qname $global_mark
+#route_cn_first#global_mark_yes          exec: jump f_global_mark
 
-#ipv6yes        - matches: 
-#ipv6yes          - qtype 28
-#ipv6yes          exec: pong END by IPv6=yes, NO CN IP block aaaa.
+#route_cn_first#nofall        - exec: $local_unbound
+#route_cn_first#cn_recurse_yes#cnfall        - exec: $local_unbound_fall
+#route_cn_first#nofall#route_log        - matches: has_wanted_ans
+#route_cn_first#nofall#route_log          exec: query_summary route_cn_local_unbound
+#route_cn_first#cn_recurse_yes#cnfall#route_log        - matches: has_wanted_ans
+#route_cn_first#cn_recurse_yes#cnfall#route_log          exec: query_summary route_cn_local_unbound_fall
+#route_cn_first#cn_recurse_yes#cnfall        - matches: "!rcode 0"
+#route_cn_first#cn_recurse_yes#cnfall          exec: jump try_cn_fall
+#route_cn_first#cn_recurse_no#cnfall        - exec: jump try_cn_fall
+#route_cn_first#global_mark_yes#addinfo        - exec: addinfo cn_mark
+#route_cn_first#global_mark_yes        - matches: qname $cn_mark
+#route_cn_first#global_mark_yes          exec: goto accept
+#route_cn_first#addinfo        - exec: addinfo mmdb CN IP
+#route_cn_first        - matches: resp_ip_mmdb $cnip CN
+#route_cn_first          exec: goto accept
 
-#ipv6cn_only6        - matches: 
-#ipv6cn_only6          - qtype 28
-#ipv6cn_only6          exec: prefer_ipv4
+#route_cn_first#ipv6yes        - matches: 
+#route_cn_first#ipv6yes          - qtype 28
+#route_cn_first#ipv6yes          exec: pong END by IPv6=yes, NO CN IP block aaaa.
 
-#autoforward-yes#autoforward-check        - matches: 
-#autoforward-yes#autoforward-check          - "!resp_ip_mmdb $cnip PRIVATE"
-#autoforward-yes#autoforward-check          - "has_wanted_ans"
-#autoforward-yes#autoforward-check          exec: goto f_force_forward_list
-#autoforward-yes#autoforward-check        - exec: goto try_auto_check
-#autoforward-yes#autoforward-nocheck        - exec: goto f_force_forward_list
+#route_cn_first#ipv6cn_only6        - matches: 
+#route_cn_first#ipv6cn_only6          - qtype 28
+#route_cn_first#ipv6cn_only6          exec: prefer_ipv4
 
-#autoforward-no        - exec: goto f_force_dnscrypt_list
+#route_cn_first#autoforward-yes#autoforward-check        - matches: 
+#route_cn_first#autoforward-yes#autoforward-check          - "!resp_ip_mmdb $cnip PRIVATE"
+#route_cn_first#autoforward-yes#autoforward-check          - "has_wanted_ans"
+#route_cn_first#autoforward-yes#autoforward-check          exec: goto f_force_forward_list
+#route_cn_first#autoforward-yes#autoforward-check        - exec: goto try_auto_check
+#route_cn_first#autoforward-yes#autoforward-nocheck        - exec: goto f_force_forward_list
+
+#route_cn_first#autoforward-no        - exec: goto f_force_dnscrypt_list
 
 
   - tag: respond
@@ -305,10 +371,12 @@ plugins:
 #liteshuffle        - exec: shuffle 3
 #trncshuffle        - exec: shuffle 3
 #addinfo        - exec: addinfo respond mosdns cache
+#route_log        - exec: query_summary route_mosdns_cache
         - exec: ok
   - tag: check_cache
     type: sequence
     args:
+#admin_log        - exec: query_summary query
         - exec: cache {MSCACHE}
         - matches: has_wanted_ans
           exec: goto respond
@@ -318,12 +386,12 @@ plugins:
     type: udp_server
     args:
       entry: check_cache
-      listen: :53
+      listen: :{MOSDNS_LISTEN_PORT}
   - tag: "tcp_server"
     type: "tcp_server"
     args:
       entry: check_cache
-      listen: :53
+      listen: :{MOSDNS_LISTEN_PORT}
       idle_timeout: 5
 #flushd_un_yes  - tag: "flushd_server"
 #flushd_un_yes    type: "flushd_server"

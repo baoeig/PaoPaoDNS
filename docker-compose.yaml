@@ -16,6 +16,8 @@ services:
       - CNAUTO=yes
       - IPV6=no
       - CNFALL=yes
+      - CN_RECURSE=yes
+      - CNFALL_QTIME=3
       - CUSTOM_FORWARD=10.10.10.3:53
       - AUTO_FORWARD=no
       - CN_TRACKER=yes
@@ -23,6 +25,9 @@ services:
     ports:
       - "53:53/udp"
       - "53:53/tcp"
+      - "5301:5301/udp"
+      - "5301:5301/tcp"
       - "5304:5304/udp"
       - "5304:5304/tcp"
       - "7889:7889/tcp"
+      - "8080:8080/tcp"
