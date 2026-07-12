@@ -66,6 +66,9 @@ fi
 if [ "$IPV6" = "yes_only6" ]; then
     sed -i "s/#ipv6cn_only6//g" /tmp/mosdns.yaml
 fi
+if [ "$IPV6" = "raw" ]; then
+    sed -i "s/#ipv6raw//g" /tmp/mosdns.yaml
+fi
 
 # CNFALL
 if [ "$CNFALL" = "yes" ]; then

@@ -211,7 +211,7 @@ QUERY_ANSWER_LOG_MAX_LINES|`5000`|`100-100000`|
 - SOCKS5：为分流非CN IP的域名优先使用SOCKS5查询（如`10.10.10.8:7890`，强制使用socks5查询则加上@，比如`@10.10.10.8:7890`），但没有也能查，非必须项。仅在CNAUTO=yes时生效。SOCKS5初始化会有大概3分钟的延迟连接测试过程，期间的解析结果并非最优延迟。  
 - TZ: 设置系统的运行时区，仅影响输出日志不影响程序运行
 - UPDATE: 检查更新根域数据和GEOIP数据的频率，`no`不检查，其中GEOIP更新仅在CNAUTO=yes时生效。`daily`,`weekly`,`monthly`分别为 Alpine 默认定义的每天凌晨2点、每周六凌晨3点、每月1号凌晨5点。可在管理后台修改，保存后立即调整 `/etc/periodic` 中的任务，无需重启服务；更新数据后会自动完成重载。
-- IPV6： 仅在CNAUTO=yes时生效，是否返回IPv6的解析结果，默认为no，如果没有IPv6环境，选择no可以节省内存。设置为yes返回IPv6的查询（为分流优化，非大陆双栈域名仅返回A记录）。如果设置为`only6`，则只对IPv6 only的域名返回IPv6结果。如果设置为`yes_only6`，则对大陆域名返回IPv6的解析结果（相当于`yes`），对非大陆域名只对IPv6 only的域名返回IPv6结果（相当于`only6`）。如果设置为`raw`，则不对IPv6结果做任何处理，直接返回原始记录。      
+- IPV6： 仅在CNAUTO=yes时生效，是否返回IPv6的解析结果，默认为no，如果没有IPv6环境，选择no可以节省内存。设置为yes返回IPv6的查询（为分流优化，非大陆双栈域名仅返回A记录）。如果设置为`only6`，则只对IPv6 only的域名返回IPv6结果。如果设置为`yes_only6`，则对大陆域名返回IPv6的解析结果（相当于`yes`），对非大陆域名只对IPv6 only的域名返回IPv6结果（相当于`only6`）。如果设置为`raw`，则不对IPv6结果做过滤；在 `gfwlist`/`foreign_first` 配合 `AUTO_FORWARD` 时，AAAA 会绕过可能只支持 Fake-IP A 记录的 `CUSTOM_FORWARD`，改走加密 DNS 获取真实 IPv6。
 - CNFALL: 仅在CNAUTO=yes时生效，在遇到本地递归网络质量较差的时候，递归查询是否回退到转发查询，默认为yes。配置为no可以保证更实时准确的解析，但要求网络质量稳定（尽量减少nat的层数），推荐部署在具备公网IP的一级路由下的时候设置为no； 配置为yes可以兼顾解析质量和网络质量的平衡，保证长期总体的准确解析的同时兼顾短时间内网络超时的回退处理。    
 - CN_RECURSE: 仅在`CNAUTO=yes`、`CNFALL=yes`时生效，控制 CN 域名是否优先尝试本地递归`5301`。如果所在网络无法直连根服务器，导致新域名频繁出现`local_unbound_fall upstream error`，可设为`no`直接使用公共 DNS 回退链路。
 - CNFALL_QTIME: 仅在`CNAUTO=yes`、`CNFALL=yes`时生效，单位毫秒。控制 mosdns 首次等待本地递归`5301`的时间，默认`3`；新域名首查经常出现`local_unbound_fall upstream error`时可调大到`50`或`100`以减少快速回退日志。

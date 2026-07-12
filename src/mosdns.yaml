@@ -338,6 +338,10 @@ plugins:
 ##zones_qname_list_start##
 ##zones_qname_list_end##
 
+#route_foreign_first#global_mark_yes#ipv6raw        - matches:
+#route_foreign_first#global_mark_yes#ipv6raw          - qname $global_mark
+#route_foreign_first#global_mark_yes#ipv6raw          - qtype 28
+#route_foreign_first#global_mark_yes#ipv6raw          exec: goto f_force_dnscrypt_list
 #route_foreign_first#global_mark_yes#autoforward-yes        - matches: qname $global_mark
 #route_foreign_first#global_mark_yes#autoforward-yes          exec: goto f_force_forward_list
 #route_foreign_first#global_mark_yes#autoforward-no        - matches: qname $global_mark
@@ -350,6 +354,10 @@ plugins:
 #route_foreign_first#ipv6cn_only6          exec: prefer_ipv4
 #route_foreign_first        - exec: goto f_cn_default
 
+#route_gfwlist#ipv6raw        - matches:
+#route_gfwlist#ipv6raw          - qname $gfwlist
+#route_gfwlist#ipv6raw          - qtype 28
+#route_gfwlist#ipv6raw          exec: goto f_force_dnscrypt_list
 #route_gfwlist#autoforward-yes        - matches: qname $gfwlist
 #route_gfwlist#autoforward-yes          exec: goto f_force_forward_list
 #route_gfwlist#autoforward-no        - matches: qname $gfwlist
