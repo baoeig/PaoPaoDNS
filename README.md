@@ -176,7 +176,7 @@ docker exec paopaodns test.sh
 CNAUTO|`yes`|`yes`,`no`|
 DNSPORT|`53`|端口值|
 DNS_SERVERNAME|`PaoPaoDNS,blog.03k.org`|不含空格的英文字符串|
-SERVER_IP|空，非必须。|IP地址，如`10.10.10.8`；也可设为`auto`启动时自动探测当前出站IPv4|
+SERVER_IP|`auto`|IP地址，如`10.10.10.8`；`auto`在启动时自动探测当前出站IPv4；`none`禁用服务域名记录|
 SOCKS5|空，非必须。|如：`10.10.10.8:7890`|
 TZ|`Asia/Shanghai`|tzdata时区值|
 UPDATE|`weekly`|`no`,`daily`,`weekly`,`monthly`|

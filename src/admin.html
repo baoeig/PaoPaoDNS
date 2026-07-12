@@ -290,7 +290,7 @@ async function loadConfig() {
         <div class="label">${s.label || s.key} <code style="color:var(--text-dim);font-size:11px">${s.key}</code></div>
         <div class="desc">${s.desc || ''}</div>
       </div>
-      <span class="setting-value">${s.current}</span>
+      <span class="setting-value">${s.display || s.current}</span>
     </div>
   `).join('');
   reconcilePendingChanges();

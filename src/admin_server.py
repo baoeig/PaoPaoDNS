@@ -129,7 +129,7 @@ READONLY_SETTINGS = [
     {'key': 'SOCKS5', 'label': 'Socks5 代理', 'desc': 'dnscrypt 上游代理地址，影响启动时生成的 dnscrypt 和 unbound 转发配置'},
     {'key': 'DNSPORT', 'label': 'DNS 监听端口', 'desc': '容器内 DNS 服务监听端口，通常通过容器端口映射暴露到宿主机'},
     {'key': 'DNS_SERVERNAME', 'label': 'DNS 服务名', 'desc': 'Unbound 使用的服务器身份名称，用于响应和服务标识'},
-    {'key': 'SERVER_IP', 'label': '服务域名 IP', 'desc': '为 paopao.dns 等内置 hosts 记录指定解析 IP；可设为 auto 在启动时自动探测当前出站 IPv4'},
+    {'key': 'SERVER_IP', 'label': '服务域名 IP', 'desc': 'paopao.dns 的实际解析 IP；默认 auto 在启动时自动探测当前出站 IPv4'},
 ]
 
 
@@ -379,11 +379,21 @@ def get_config():
 
     readonly = []
     for s in READONLY_SETTINGS:
+        current = merged.get(s['key'], '')
+        display = current
+        if s['key'] == 'SERVER_IP':
+            current = env_conf.get('SERVER_IP', current)
+            configured = custom_env.get('SERVER_IP', env_conf.get('SERVER_IP_CONFIG', ''))
+            if configured == 'auto':
+                display = f'{current}（自动探测）'
+            elif configured == 'none':
+                display = '未启用'
         readonly.append({
             'key': s['key'],
             'label': s['label'],
             'desc': s['desc'],
-            'current': merged.get(s['key'], ''),
+            'current': current,
+            'display': display,
             'readonly': True,
         })
 

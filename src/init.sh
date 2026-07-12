@@ -198,6 +198,7 @@ ETHIP=$(ip -o -4 route get 1.0.0.1 | grep -Eo "$IPREX4" | tail -1)
 if [ -z "$ETHIP" ]; then
     ETHIP="127.0.0.2"
 fi
+SERVER_IP_CONFIG="$SERVER_IP"
 if [ "$SERVER_IP" = "auto" ]; then
     SERVER_IP="$ETHIP"
     echo "SERVER_IP auto detected: $SERVER_IP"
@@ -234,6 +235,7 @@ echo TZ:-"$TZ""-" >>/tmp/env.conf
 echo UPDATE:-"$UPDATE""-" >>/tmp/env.conf
 echo DNS_SERVERNAME:-"$DNS_SERVERNAME""-" >>/tmp/env.conf
 echo SERVER_IP:-"$SERVER_IP""-" >>/tmp/env.conf
+echo SERVER_IP_CONFIG:-"$SERVER_IP_CONFIG""-" >>/tmp/env.conf
 echo ETHIP:-"$ETHIP""-" >>/tmp/env.conf
 echo DNSPORT:-"$DNSPORT""-" >>/tmp/env.conf
 echo SOCKS5:-"$SOCKS5""-" >>/tmp/env.conf
