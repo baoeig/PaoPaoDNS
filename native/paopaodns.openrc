@@ -23,11 +23,11 @@ start_pre() {
 stop_post() {
     process_ids=$(ps -ef | awk '
         $4 == "python3" && $5 == "/usr/sbin/admin_server.py" {print $1}
-        $4 == "redis-server" {print $1}
-        $4 == "unbound" {print $1}
-        $4 == "mosdns" {print $1}
-        $4 == "dnscrypt-proxy" {print $1}
-        $4 == "inotifywait" {print $1}
+        $4 ~ /(^|\/)redis-server$/ {print $1}
+        $4 ~ /(^|\/)unbound$/ {print $1}
+        $4 ~ /(^|\/)mosdns$/ {print $1}
+        $4 ~ /(^|\/)dnscrypt-proxy$/ {print $1}
+        $4 ~ /(^|\/)inotifywait$/ {print $1}
         $4 == "{watch_list.sh}" {print $1}
         $4 == "{data_update.sh}" {print $1}
     ')
@@ -36,8 +36,9 @@ stop_post() {
     done
     attempt=0
     while [ "$attempt" -lt 50 ] && ps -ef | awk '
-        $4 == "redis-server" || $4 == "unbound" || $4 == "mosdns" ||
-        $4 == "dnscrypt-proxy" || $4 == "inotifywait" ||
+        $4 ~ /(^|\/)redis-server$/ || $4 ~ /(^|\/)unbound$/ ||
+        $4 ~ /(^|\/)mosdns$/ || $4 ~ /(^|\/)dnscrypt-proxy$/ ||
+        $4 ~ /(^|\/)inotifywait$/ ||
         $4 == "{watch_list.sh}" || $4 == "{data_update.sh}" {found=1}
         END {exit !found}
     '; do
