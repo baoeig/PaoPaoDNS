@@ -24,8 +24,10 @@ ANSWER_LOG = os.path.join(DATA_DIR, 'query_answer_log.jsonl')
 RELOAD_TIMEOUT = 180
 DNS_PROXY_LISTEN_PORT = int(os.environ.get('DNS_PROXY_LISTEN_PORT', '53'))
 DNS_PROXY_UPSTREAM_PORT = int(os.environ.get('DNS_PROXY_UPSTREAM_PORT', '5353'))
-ANSWER_LOG_MAX_LINES = 5000
 ANSWER_MATCH_WINDOW = 10
+DEFAULT_QUERY_LOG_MAX_MB = 10
+DEFAULT_QUERY_LOG_CLEAN_INTERVAL = 600
+DEFAULT_QUERY_ANSWER_LOG_MAX_LINES = 5000
 CACHE_DBS = [
     {'db': 0, 'source': '本地递归', 'desc': 'unbound raw cachedb'},
     {'db': 1, 'source': '转发递归', 'desc': 'unbound forward cachedb'},
@@ -115,6 +117,9 @@ TEXT_SETTINGS = [
     {'key': 'CUSTOM_FORWARD', 'label': '自定义转发', 'desc': 'AUTO_FORWARD 和强制转发列表使用的上游 DNS，格式 IP:PORT 或 [IPv6]:PORT', 'placeholder': '8.8.8.8:53'},
     {'key': 'CUSTOM_FORWARD_TTL', 'label': '转发 TTL', 'desc': 'CUSTOM_FORWARD 响应 TTL 下限，0 表示不修改', 'placeholder': '0'},
     {'key': 'CNFALL_QTIME', 'label': 'CN回退等待', 'desc': 'CNFALL=yes 时等待本地递归 5301 的时间，单位毫秒；调大可减少新域名首查超时报错', 'placeholder': '3', 'default': '3'},
+    {'key': 'QUERY_LOG_MAX_MB', 'label': '查询日志上限', 'desc': 'mosdns 查询日志最大容量，单位 MB；超限后保留最新内容', 'placeholder': '10', 'default': '10'},
+    {'key': 'QUERY_LOG_CLEAN_INTERVAL', 'label': '日志检查间隔', 'desc': '定时检查查询日志的间隔，单位秒', 'placeholder': '600', 'default': '600'},
+    {'key': 'QUERY_ANSWER_LOG_MAX_LINES', 'label': '响应日志行数', 'desc': '查询响应摘要最多保留的行数', 'placeholder': '5000', 'default': '5000'},
 ]
 
 READONLY_SETTINGS = [
@@ -220,6 +225,20 @@ def validate_setting(key, val):
         if qtime < 1 or qtime > 5000:
             return None, 'CNFALL_QTIME out of range'
         return str(qtime), None
+
+    numeric_settings = {
+        'QUERY_LOG_MAX_MB': (1, 1024),
+        'QUERY_LOG_CLEAN_INTERVAL': (60, 86400),
+        'QUERY_ANSWER_LOG_MAX_LINES': (100, 100000),
+    }
+    if key in numeric_settings:
+        if not re.match(r'^[0-9]+$', val):
+            return None, f'{key} must be a number'
+        number = int(val)
+        minimum, maximum = numeric_settings[key]
+        if number < minimum or number > maximum:
+            return None, f'{key} must be between {minimum} and {maximum}'
+        return str(number), None
 
     return None, f'{key} is not editable'
 
@@ -724,6 +743,65 @@ def format_dns_rdata(packet, offset, length, rr_type):
 
 
 ANSWER_LOG_LOCK = threading.Lock()
+MOSDNS_LOG_LOCK = threading.Lock()
+
+
+def get_log_cleanup_settings():
+    settings = read_env_conf()
+    settings.update(read_custom_env())
+
+    def get_number(key, default, minimum, maximum):
+        try:
+            value = int(settings.get(key, default))
+        except (TypeError, ValueError):
+            value = default
+        return max(minimum, min(value, maximum))
+
+    return {
+        'max_bytes': get_number('QUERY_LOG_MAX_MB', DEFAULT_QUERY_LOG_MAX_MB, 1, 1024) * 1024 * 1024,
+        'interval': get_number('QUERY_LOG_CLEAN_INTERVAL', DEFAULT_QUERY_LOG_CLEAN_INTERVAL, 60, 86400),
+        'answer_lines': get_number('QUERY_ANSWER_LOG_MAX_LINES', DEFAULT_QUERY_ANSWER_LOG_MAX_LINES, 100, 100000),
+    }
+
+
+def trim_mosdns_log(max_bytes):
+    try:
+        if os.path.getsize(MOSDNS_LOG) <= max_bytes:
+            return False
+        keep_bytes = max(1, max_bytes * 3 // 4)
+        with MOSDNS_LOG_LOCK:
+            with open(MOSDNS_LOG, 'r+b') as log_file:
+                log_file.seek(0, os.SEEK_END)
+                size = log_file.tell()
+                log_file.seek(max(0, size - keep_bytes))
+                content = log_file.read()
+                if size > keep_bytes:
+                    newline = content.find(b'\n')
+                    if newline >= 0:
+                        content = content[newline + 1:]
+                log_file.seek(0)
+                log_file.write(content)
+                log_file.truncate()
+        return True
+    except (FileNotFoundError, OSError):
+        return False
+
+
+def run_log_cleanup():
+    last_cleanup = 0
+    while True:
+        settings = get_log_cleanup_settings()
+        now = time.monotonic()
+        if now - last_cleanup >= settings['interval']:
+            trim_mosdns_log(settings['max_bytes'])
+            with ANSWER_LOG_LOCK:
+                trim_answer_log(settings['answer_lines'])
+            last_cleanup = now
+        time.sleep(min(60, settings['interval']))
+
+
+def start_log_cleanup():
+    threading.Thread(target=run_log_cleanup, daemon=True).start()
 
 
 def start_dns_answer_proxy():
@@ -865,14 +943,16 @@ def append_answer_snapshot(record):
             pass
 
 
-def trim_answer_log():
+def trim_answer_log(max_lines=None):
+    if max_lines is None:
+        max_lines = get_log_cleanup_settings()['answer_lines']
     try:
         with open(ANSWER_LOG, 'r') as f:
             lines = f.readlines()
-        if len(lines) <= ANSWER_LOG_MAX_LINES:
+        if len(lines) <= max_lines:
             return
         with open(ANSWER_LOG, 'w') as f:
-            f.writelines(lines[-ANSWER_LOG_MAX_LINES:])
+            f.writelines(lines[-max_lines:])
     except Exception:
         pass
 
@@ -927,7 +1007,8 @@ def read_answer_snapshots():
     records = []
     try:
         with open(ANSWER_LOG, 'r') as f:
-            for line in f.readlines()[-ANSWER_LOG_MAX_LINES:]:
+            max_lines = get_log_cleanup_settings()['answer_lines']
+            for line in f.readlines()[-max_lines:]:
                 try:
                     records.append(json.loads(line))
                 except Exception:
@@ -992,8 +1073,17 @@ def query_log():
     lines_count = min(int(request.args.get('lines', 200)), 1000)
     search = request.args.get('search', '').lower()
 
+    settings = get_log_cleanup_settings()
+    log_size = os.path.getsize(MOSDNS_LOG) if os.path.exists(MOSDNS_LOG) else 0
+    log_meta = {
+        'size': log_size,
+        'max_size': settings['max_bytes'],
+        'clean_interval': settings['interval'],
+        'answer_max_lines': settings['answer_lines'],
+    }
+
     if not os.path.exists(MOSDNS_LOG):
-        return jsonify({'entries': [], 'total': 0})
+        return jsonify({'entries': [], 'total': 0, 'log': log_meta})
 
     try:
         result = subprocess.run(
@@ -1052,7 +1142,21 @@ def query_log():
         entry.pop('_seq', None)
         entry.pop('kind', None)
         entry.pop('uqid', None)
-    return jsonify({'entries': entries, 'total': len(entries)})
+    return jsonify({'entries': entries, 'total': len(entries), 'log': log_meta})
+
+
+@app.route('/api/query-log', methods=['DELETE'])
+def clear_query_log():
+    try:
+        with MOSDNS_LOG_LOCK:
+            with open(MOSDNS_LOG, 'w'):
+                pass
+        with ANSWER_LOG_LOCK:
+            with open(ANSWER_LOG, 'w'):
+                pass
+        return jsonify({'ok': True})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 def route_key(entry):
@@ -1253,5 +1357,6 @@ def parse_mosdns_log_line(line):
 
 
 if __name__ == '__main__':
+    start_log_cleanup()
     start_dns_answer_proxy()
     app.run(host='0.0.0.0', port=8080, debug=False)

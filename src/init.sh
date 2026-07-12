@@ -251,6 +251,9 @@ echo USE_HOSTS:-"$USE_HOSTS""-" >>/tmp/env.conf
 echo HTTP_FILE:-"$HTTP_FILE""-" >>/tmp/env.conf
 echo SAFEMODE:-"$SAFEMODE""-" >>/tmp/env.conf
 echo QUERY_TIME:-"$QUERY_TIME""-" >>/tmp/env.conf
+echo QUERY_LOG_MAX_MB:-"$QUERY_LOG_MAX_MB""-" >>/tmp/env.conf
+echo QUERY_LOG_CLEAN_INTERVAL:-"$QUERY_LOG_CLEAN_INTERVAL""-" >>/tmp/env.conf
+echo QUERY_ANSWER_LOG_MAX_LINES:-"$QUERY_ANSWER_LOG_MAX_LINES""-" >>/tmp/env.conf
 echo ADDINFO:-"$ADDINFO""-" >>/tmp/env.conf
 echo ADMIN_PANEL:-"$ADMIN_PANEL""-" >>/tmp/env.conf
 echo PLATFORM:-"$(uname -a)""-" >>/tmp/env.conf

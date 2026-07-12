@@ -161,8 +161,10 @@ input[type=text]::placeholder{color:var(--text-dim)}
     <div class="card-title">
       <span>DNS 查询日志</span>
       <div style="display:flex;gap:8px;align-items:center">
+        <span id="logUsage" style="color:var(--text-dim);font-size:12px"></span>
         <input type="text" id="logSearch" placeholder="搜索域名..." style="width:200px" oninput="loadQueryLogDebounced()">
         <button class="btn btn-primary btn-sm" onclick="loadQueryLog()">刷新</button>
+        <button class="btn btn-danger btn-sm" onclick="clearQueryLog()">清空日志</button>
       </div>
     </div>
     <div class="log-scroll">
@@ -486,6 +488,10 @@ async function loadQueryLog() {
   const search = document.getElementById('logSearch').value.trim();
   const data = await api(`/api/query-log?lines=200&search=${encodeURIComponent(search)}`);
   if (!data) return;
+  const log = data.log || {};
+  const sizeMb = ((log.size || 0) / 1048576).toFixed(2);
+  const maxMb = ((log.max_size || 0) / 1048576).toFixed(0);
+  document.getElementById('logUsage').textContent = `${sizeMb} / ${maxMb} MB · ${log.clean_interval || 0}s`;
   const el = document.getElementById('logBody');
   if (data.entries.length === 0) {
     el.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-dim);padding:20px">暂无日志</td></tr>';
@@ -501,6 +507,17 @@ async function loadQueryLog() {
       <td style="color:var(--text-dim);max-width:300px;overflow:hidden;text-overflow:ellipsis">${escHtml(e.message)}</td>
     </tr>
   `).join('');
+}
+
+async function clearQueryLog() {
+  if (!confirm('确定要清空所有 DNS 查询日志吗？')) return;
+  const res = await api('/api/query-log', {method:'DELETE'});
+  if (res && res.ok) {
+    toast('查询日志已清空');
+    loadQueryLog();
+  } else {
+    toast('清空日志失败', 'error');
+  }
 }
 
 function loadQueryLogDebounced() {
