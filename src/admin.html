@@ -52,6 +52,11 @@ input[type=text]::placeholder{color:var(--text-dim)}
 .list-tab:last-child{border-radius:0 4px 4px 0}
 .list-tab.active{color:var(--primary);border-color:var(--primary);background:var(--card)}
 .domain-help{margin:-4px 0 14px;padding:10px 12px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text-dim);font-size:12px;line-height:1.6}
+.route-test-result{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-top:12px}
+.route-test-item{background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px 12px;min-width:0}
+.route-test-item .key{color:var(--text-dim);font-size:11px;margin-bottom:5px}
+.route-test-item .value{color:var(--text);font-family:monospace;font-size:13px;word-break:break-all}
+.route-test-item.route .value{color:var(--primary);font-weight:600}
 .stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:16px}
 .stat-box{background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:14px;text-align:center}
 .stat-box .val{font-size:22px;font-weight:700;color:var(--primary);font-family:monospace}
@@ -157,6 +162,21 @@ input[type=text]::placeholder{color:var(--text-dim)}
 
 <!-- Log Tab -->
 <div id="tab-log" class="hidden">
+  <div class="card">
+    <div class="card-title"><span>分流路径测试</span></div>
+    <div class="domain-help">向本机 DNS 发起真实查询，并从 MosDNS 日志中返回本次请求实际命中的分流路径。</div>
+    <div class="input-group">
+      <input type="text" id="routeTestDomain" placeholder="输入域名，如 google.com" onkeydown="if(event.key==='Enter') testRoute()">
+      <select id="routeTestType">
+        <option value="A">A</option>
+        <option value="AAAA">AAAA</option>
+        <option value="TXT">TXT</option>
+        <option value="HTTPS">HTTPS</option>
+      </select>
+      <button class="btn btn-primary" id="routeTestBtn" onclick="testRoute()">开始测试</button>
+    </div>
+    <div id="routeTestResult"></div>
+  </div>
   <div class="card">
     <div class="card-title">
       <span>DNS 查询日志</span>
@@ -507,6 +527,42 @@ async function loadQueryLog() {
       <td style="color:var(--text-dim);max-width:300px;overflow:hidden;text-overflow:ellipsis">${escHtml(e.message)}</td>
     </tr>
   `).join('');
+}
+
+async function testRoute() {
+  const domain = document.getElementById('routeTestDomain').value.trim();
+  const qtype = document.getElementById('routeTestType').value;
+  const button = document.getElementById('routeTestBtn');
+  const resultEl = document.getElementById('routeTestResult');
+  if (!domain) {
+    toast('请输入要测试的域名', 'error');
+    return;
+  }
+  button.disabled = true;
+  button.textContent = '查询中...';
+  resultEl.innerHTML = '<div style="color:var(--text-dim);font-size:12px">正在执行真实 DNS 查询并关联分流日志...</div>';
+  const result = await api('/api/route-test', {
+    method: 'POST',
+    body: JSON.stringify({domain, qtype}),
+  });
+  button.disabled = false;
+  button.textContent = '开始测试';
+  if (!result || result.error) {
+    resultEl.innerHTML = `<div style="color:var(--danger);font-size:12px">${escHtml(result?.error || '测试失败')}</div>`;
+    return;
+  }
+  const routeLabel = result.route_label || result.route || '查询成功，但未捕获到分流路径';
+  const matchedRule = result.matched_rule || {};
+  const ruleText = matchedRule.rule ? `${matchedRule.source}: ${matchedRule.rule}` : matchedRule.source || '-';
+  resultEl.innerHTML = `
+    <div class="route-test-result">
+      <div class="route-test-item route"><div class="key">实际分流路径</div><div class="value">${escHtml(routeLabel)}</div></div>
+      <div class="route-test-item"><div class="key">命中规则</div><div class="value">${escHtml(ruleText)}</div></div>
+      <div class="route-test-item"><div class="key">查询</div><div class="value">${escHtml(result.domain)} ${escHtml(result.qtype)}</div></div>
+      <div class="route-test-item"><div class="key">响应状态 / 耗时</div><div class="value">${escHtml(result.rcode || '-')} · ${escHtml(String(result.elapsed_ms))} ms</div></div>
+      <div class="route-test-item"><div class="key">响应结果</div><div class="value">${escHtml(result.answers_text || '-')}</div></div>
+    </div>`;
+  loadQueryLog();
 }
 
 async function clearQueryLog() {

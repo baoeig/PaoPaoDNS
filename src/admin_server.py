@@ -1402,6 +1402,161 @@ def parse_mosdns_log_line(line):
     }
 
 
+def build_dns_query(domain, qtype):
+    qtype_codes = {'A': 1, 'AAAA': 28, 'TXT': 16, 'HTTPS': 65}
+    qtype_code = qtype_codes[qtype]
+    query_id = int.from_bytes(os.urandom(2), 'big')
+    labels = domain.rstrip('.').split('.')
+    encoded_labels = [label.encode('idna') for label in labels]
+    qname = b''.join(bytes([len(label)]) + label for label in encoded_labels) + b'\x00'
+    header = struct.pack('!HHHHHH', query_id, 0x0100, 1, 0, 0, 0)
+    return header + qname + struct.pack('!HH', qtype_code, 1)
+
+
+def query_local_dns(domain, qtype):
+    query_packet = build_dns_query(domain, qtype)
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.settimeout(10)
+    started = time.monotonic()
+    try:
+        sock.sendto(query_packet, ('127.0.0.1', DNS_PROXY_LISTEN_PORT))
+        response_packet, _ = sock.recvfrom(65535)
+    finally:
+        sock.close()
+    elapsed_ms = round((time.monotonic() - started) * 1000, 2)
+    parsed = parse_dns_message(response_packet) or {}
+    answers = compact_answers(parsed.get('answers', []), qtype)
+    return {
+        'rcode': parsed.get('rcode', ''),
+        'answers': answers,
+        'answers_text': ', '.join(answers),
+        'elapsed_ms': elapsed_ms,
+    }
+
+
+def find_route_after_offset(offset, domain, qtype, timeout=3):
+    deadline = time.monotonic() + timeout
+    domain = domain.lower().rstrip('.')
+    while time.monotonic() < deadline:
+        try:
+            size = os.path.getsize(MOSDNS_LOG)
+            if size < offset:
+                offset = 0
+            with open(MOSDNS_LOG, 'r', errors='replace') as log_file:
+                log_file.seek(offset)
+                lines = log_file.readlines()
+        except OSError:
+            lines = []
+
+        parsed_lines = [parse_mosdns_log_line(line) for line in lines]
+        parsed_lines = [item for item in parsed_lines if item]
+        route_by_uqid = {
+            item.get('uqid'): item
+            for item in parsed_lines
+            if item.get('kind') == 'route' and item.get('uqid') is not None
+        }
+        candidates = [
+            item for item in parsed_lines
+            if item.get('kind') != 'route'
+            and item.get('domain', '').lower().rstrip('.') == domain
+            and item.get('qtype') == qtype
+        ]
+        for candidate in reversed(candidates):
+            route = route_by_uqid.get(candidate.get('uqid'))
+            if route:
+                return {
+                    'route': route.get('route', ''),
+                    'route_label': route.get('route_label', ''),
+                    'message': candidate.get('message', ''),
+                    'time': candidate.get('time', ''),
+                }
+        time.sleep(0.1)
+    return {'route': '', 'route_label': '', 'message': '', 'time': ''}
+
+
+def domain_matches_rule(domain, rule):
+    rule = rule.strip()
+    if not rule or rule.startswith('#'):
+        return False
+    if rule.startswith('full:'):
+        return domain == rule[5:].lower().rstrip('.')
+    if rule.startswith('domain:'):
+        suffix = rule[7:].lower().rstrip('.')
+        return domain == suffix or domain.endswith('.' + suffix)
+    if rule.startswith('keyword:'):
+        return rule[8:].lower() in domain
+    if rule.startswith('regexp:'):
+        try:
+            return re.search(rule[7:], domain) is not None
+        except re.error:
+            return False
+    suffix = rule.lower().rstrip('.')
+    return domain == suffix or domain.endswith('.' + suffix)
+
+
+def find_matching_rule(domain):
+    settings = read_env_conf()
+    settings.update(read_custom_env())
+    route_mode = settings.get('ROUTE_MODE', 'cn_first')
+    candidates = [
+        ('强制转发', '/tmp/force_forward_list.txt'),
+        ('强制加密 DNS', '/tmp/force_dnscrypt_list.txt'),
+        ('强制本地递归', '/tmp/force_recurse_list.txt'),
+    ]
+    if route_mode == 'gfwlist':
+        candidates.append(('GFWList', '/tmp/gfwlist.txt'))
+    elif settings.get('USE_MARK_DATA', 'yes') == 'yes':
+        candidates.extend([
+            ('预分类 CN', '/tmp/cn_mark.dat'),
+            ('预分类非 CN', '/tmp/global_mark.dat'),
+        ])
+
+    for source, filepath in candidates:
+        try:
+            with open(filepath, 'r', errors='replace') as rule_file:
+                for line in rule_file:
+                    rule = line.strip()
+                    if domain_matches_rule(domain, rule):
+                        return {'source': source, 'rule': rule, 'file': filepath}
+        except OSError:
+            continue
+    return {'source': '动态解析判断', 'rule': '', 'file': ''}
+
+
+@app.route('/api/route-test', methods=['POST'])
+def route_test():
+    data = request.get_json() or {}
+    domain = str(data.get('domain', '')).strip().lower().rstrip('.')
+    qtype = str(data.get('qtype', 'A')).strip().upper()
+    if not domain or len(domain) > 253:
+        return jsonify({'error': 'invalid domain'}), 400
+    try:
+        ascii_domain = domain.encode('idna').decode('ascii')
+    except UnicodeError:
+        return jsonify({'error': 'invalid domain'}), 400
+    if not re.match(r'^(?=.{1,253}$)(?!-)[a-z0-9-]{1,63}(?<!-)(\.(?!-)[a-z0-9-]{1,63}(?<!-))*$', ascii_domain):
+        return jsonify({'error': 'invalid domain'}), 400
+    if qtype not in ('A', 'AAAA', 'TXT', 'HTTPS'):
+        return jsonify({'error': 'unsupported query type'}), 400
+
+    try:
+        log_offset = os.path.getsize(MOSDNS_LOG)
+    except OSError:
+        log_offset = 0
+    try:
+        result = query_local_dns(ascii_domain, qtype)
+    except (OSError, socket.timeout) as e:
+        return jsonify({'error': f'DNS query failed: {e}'}), 502
+    result.update(find_route_after_offset(log_offset, ascii_domain, qtype))
+    result.update({
+        'domain': domain,
+        'ascii_domain': ascii_domain,
+        'qtype': qtype,
+        'matched_rule': find_matching_rule(ascii_domain),
+    })
+    return jsonify(result)
+
+
 if __name__ == '__main__':
     start_log_cleanup()
     start_dns_answer_proxy()
