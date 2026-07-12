@@ -1,0 +1,51 @@
+#!/sbin/openrc-run
+# shellcheck disable=SC2034
+
+name="PaoPaoDNS"
+description="PaoPaoDNS recursive DNS stack"
+command="/usr/sbin/init.sh"
+command_background="yes"
+pidfile="/run/paopaodns.pid"
+output_log="/var/log/paopaodns.log"
+error_log="/var/log/paopaodns.log"
+
+depend() {
+    need net
+    use logger
+    after firewall
+}
+
+start_pre() {
+    checkpath --directory --mode 0755 /data /var/log
+    rm -f /tmp/redis.sock /tmp/redis-server.pid /tmp/unbound.pid
+}
+
+stop_post() {
+    process_ids=$(ps -ef | awk '
+        $4 == "python3" && $5 == "/usr/sbin/admin_server.py" {print $1}
+        $4 == "redis-server" {print $1}
+        $4 == "unbound" {print $1}
+        $4 == "mosdns" {print $1}
+        $4 == "dnscrypt-proxy" {print $1}
+        $4 == "inotifywait" {print $1}
+        $4 == "{watch_list.sh}" {print $1}
+        $4 == "{data_update.sh}" {print $1}
+    ')
+    for process_id in $process_ids; do
+        kill -TERM "$process_id" 2>/dev/null || true
+    done
+    attempt=0
+    while [ "$attempt" -lt 50 ] && ps -ef | awk '
+        $4 == "redis-server" || $4 == "unbound" || $4 == "mosdns" ||
+        $4 == "dnscrypt-proxy" || $4 == "inotifywait" ||
+        $4 == "{watch_list.sh}" || $4 == "{data_update.sh}" {found=1}
+        END {exit !found}
+    '; do
+        attempt=$((attempt + 1))
+        sleep 0.1
+    done
+    for process_id in $process_ids; do
+        kill -KILL "$process_id" 2>/dev/null || true
+    done
+    rm -f /tmp/redis.sock /tmp/redis-server.pid /tmp/unbound.pid
+}
