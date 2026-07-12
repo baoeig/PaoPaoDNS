@@ -1314,7 +1314,7 @@ def compact_answers(answers, qtype):
 
 def parse_mosdns_log_line(line):
     m = re.match(
-        r'(\d{4}-\d{2}-\d{2}T[\d:.]+[+-]\d{2}:?\d{2})\s+'
+        r'(\d{4}-\d{2}-\d{2}T[\d:.]+(?:Z|[+-]\d{2}:?\d{2}))\s+'
         r'(\w+)\s+'
         r'(.+)',
         line
