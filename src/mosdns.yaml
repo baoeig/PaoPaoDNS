@@ -358,13 +358,14 @@ plugins:
 #route_gfwlist#ipv6raw          - qname $gfwlist
 #route_gfwlist#ipv6raw          - qtype 28
 #route_gfwlist#ipv6raw          exec: goto f_force_dnscrypt_list
+#route_gfwlist#ipv6yes        - matches:
+#route_gfwlist#ipv6yes          - qname $gfwlist
+#route_gfwlist#ipv6yes          - qtype 28
+#route_gfwlist#ipv6yes          exec: pong END by IPv6=yes, gfwlist block aaaa.
 #route_gfwlist#autoforward-yes        - matches: qname $gfwlist
 #route_gfwlist#autoforward-yes          exec: goto f_force_forward_list
 #route_gfwlist#autoforward-no        - matches: qname $gfwlist
 #route_gfwlist#autoforward-no          exec: goto f_force_dnscrypt_list
-#route_gfwlist#ipv6yes        - matches:
-#route_gfwlist#ipv6yes          - qtype 28
-#route_gfwlist#ipv6yes          exec: pong END by IPv6=yes, gfwlist block aaaa.
 #route_gfwlist#ipv6cn_only6        - matches:
 #route_gfwlist#ipv6cn_only6          - qtype 28
 #route_gfwlist#ipv6cn_only6          exec: prefer_ipv4
