@@ -1150,34 +1150,24 @@ def query_log():
     except Exception:
         raw_lines = []
 
-    parsed_lines = []
-    routes = {}
-    routes_by_uqid = {}
+    entries = []
+    pending_routes = {}
     for idx, line in enumerate(raw_lines):
         parsed = parse_mosdns_log_line(line)
         if not parsed:
             continue
         parsed['_seq'] = idx
         if parsed.get('kind') == 'route':
-            route_info = {
+            key = route_key(parsed)
+            if key:
+                pending_routes[key] = {
                 'route': parsed.get('route', ''),
                 'route_label': parsed.get('route_label', ''),
                 '_seq': idx,
             }
-            if parsed.get('uqid') is not None:
-                routes_by_uqid[parsed['uqid']] = route_info
-            key = route_key(parsed)
-            if key:
-                routes[key] = route_info
             continue
-        parsed_lines.append(parsed)
-
-    entries = []
-    for parsed in parsed_lines:
-        route_info = routes.get(route_key(parsed))
-        if not route_info and parsed.get('uqid') is not None:
-            route_info = routes_by_uqid.get(parsed['uqid'])
-        if route_info:
+        route_info = pending_routes.pop(route_key(parsed), None)
+        if route_info and idx - route_info.get('_seq', idx) <= 3:
             parsed['route'] = route_info.get('route', '')
             parsed['route_label'] = route_info.get('route_label', '')
         entries.append(parsed)
@@ -1460,10 +1450,10 @@ def find_route_after_offset(offset, domain, qtype, timeout=3):
 
         parsed_lines = [parse_mosdns_log_line(line) for line in lines]
         parsed_lines = [item for item in parsed_lines if item]
-        route_by_uqid = {
-            item.get('uqid'): item
+        route_by_key = {
+            route_key(item): item
             for item in parsed_lines
-            if item.get('kind') == 'route' and item.get('uqid') is not None
+            if item.get('kind') == 'route' and route_key(item)
         }
         candidates = [
             item for item in parsed_lines
@@ -1472,7 +1462,7 @@ def find_route_after_offset(offset, domain, qtype, timeout=3):
             and item.get('qtype') == qtype
         ]
         for candidate in reversed(candidates):
-            route = route_by_uqid.get(candidate.get('uqid'))
+            route = route_by_key.get(route_key(candidate))
             if route:
                 return {
                     'route': route.get('route', ''),
