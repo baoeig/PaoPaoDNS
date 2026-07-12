@@ -54,14 +54,19 @@ fi
 if [ ! -f /data/redis.conf ]; then
     cp /usr/sbin/redis.conf /data/
 fi
-if [ "$UPDATE" != "no" ]; then
-    crond
-    if [ ! -f /etc/periodic/"$UPDATE" ]; then
-        rm -rf /etc/periodic/*
-        mkdir -p /etc/periodic/"$UPDATE"
-        cp /usr/sbin/data_update.sh /etc/periodic/"$UPDATE"
+for update_period in daily weekly monthly; do
+    mkdir -p /etc/periodic/"$update_period"
+    rm -f /etc/periodic/"$update_period"/paopaodns-update
+    rm -f /etc/periodic/"$update_period"/data_update.sh
+done
+case "$UPDATE" in
+daily | weekly | monthly)
+    ln -s /usr/sbin/data_update.sh /etc/periodic/"$UPDATE"/paopaodns-update
+    if ! pgrep -x crond >/dev/null 2>&1; then
+        crond
     fi
-fi
+    ;;
+esac
 
 free -m
 free -h

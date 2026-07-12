@@ -21,6 +21,7 @@ CUSTOM_ENV_FILE = os.path.join(DATA_DIR, 'custom_env.ini')
 ENV_CONF_FILE = os.path.join(TMP_DIR, 'env.conf')
 MOSDNS_LOG = os.path.join(TMP_DIR, 'mosdns.log')
 ANSWER_LOG = os.path.join(DATA_DIR, 'query_answer_log.jsonl')
+PERIODIC_ROOT = '/etc/periodic'
 RELOAD_TIMEOUT = 180
 DNS_PROXY_LISTEN_PORT = int(os.environ.get('DNS_PROXY_LISTEN_PORT', '53'))
 DNS_PROXY_UPSTREAM_PORT = int(os.environ.get('DNS_PROXY_UPSTREAM_PORT', '5353'))
@@ -99,6 +100,7 @@ DOMAIN_LIST_DESCS = {
 }
 
 TOGGLE_SETTINGS = [
+    {'key': 'UPDATE', 'label': '规则更新周期', 'desc': 'no=关闭；daily=每天约 02:00；weekly=每周六约 03:00；monthly=每月 1 日约 05:00', 'values': ['no', 'daily', 'weekly', 'monthly']},
     {'key': 'CNFALL', 'label': 'CN回退', 'desc': 'CN解析失败时回退到加密DNS', 'values': ['yes', 'no']},
     {'key': 'CN_RECURSE', 'label': 'CN本地递归', 'desc': 'CNFALL=yes 时先尝试本地递归 5301；根递归不通时建议关闭，直接走公共 DNS 回退', 'values': ['yes', 'no']},
     {'key': 'AUTO_FORWARD', 'label': '自动转发', 'desc': '自动转发非CN域名到CUSTOM_FORWARD', 'values': ['yes', 'no']},
@@ -192,6 +194,25 @@ def write_custom_env(settings):
 
     with open(CUSTOM_ENV_FILE, 'w') as f:
         f.writelines(new_lines)
+
+
+def configure_update_schedule(period):
+    task_name = 'paopaodns-update'
+    periods = ('daily', 'weekly', 'monthly')
+    for item in periods:
+        directory = os.path.join(PERIODIC_ROOT, item)
+        os.makedirs(directory, exist_ok=True)
+        for filename in (task_name, 'data_update.sh'):
+            filepath = os.path.join(directory, filename)
+            if os.path.lexists(filepath):
+                os.remove(filepath)
+    if period in periods:
+        os.symlink('/usr/sbin/data_update.sh', os.path.join(PERIODIC_ROOT, period, task_name))
+        crond_running = subprocess.run(
+            ['pgrep', '-x', 'crond'], capture_output=True, timeout=5
+        ).returncode == 0
+        if not crond_running:
+            subprocess.run(['crond'], check=True, timeout=5)
 
 
 def validate_setting(key, val):
@@ -303,6 +324,26 @@ def status():
     return jsonify(services)
 
 
+@app.route('/api/update-schedule')
+def update_schedule():
+    settings = read_env_conf()
+    settings.update(read_custom_env())
+    period = settings.get('UPDATE', 'weekly')
+    schedule_labels = {
+        'no': '已关闭',
+        'daily': '每天约 02:00',
+        'weekly': '每周六约 03:00',
+        'monthly': '每月 1 日约 05:00',
+    }
+    task_path = os.path.join(PERIODIC_ROOT, period, 'paopaodns-update') if period != 'no' else ''
+    return jsonify({
+        'period': period,
+        'label': schedule_labels.get(period, period),
+        'enabled': period != 'no' and os.path.exists(task_path),
+        'task_path': task_path,
+    })
+
+
 @app.route('/api/config', methods=['GET'])
 def get_config():
     env_conf = read_env_conf()
@@ -367,6 +408,11 @@ def update_config():
     if not to_update:
         return jsonify({'error': 'no valid settings'}), 400
 
+    if 'UPDATE' in to_update:
+        try:
+            configure_update_schedule(to_update['UPDATE'])
+        except OSError as e:
+            return jsonify({'error': f'failed to update schedule: {e}'}), 500
     write_custom_env(to_update)
     return jsonify({'ok': True, 'updated': to_update})
 
