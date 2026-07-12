@@ -108,7 +108,7 @@ TOGGLE_SETTINGS = [
     {'key': 'ROUTE_MODE', 'label': '分流模式', 'desc': 'cn_first=先按国内解析判断；foreign_first=先匹配国外域名规则，未命中一律走国内；gfwlist=先匹配 gfwlist，未命中一律走国内', 'values': ['cn_first', 'foreign_first', 'gfwlist']},
     {'key': 'USE_MARK_DATA', 'label': '预分类数据', 'desc': '使用预分类域名数据库加速分流', 'values': ['yes', 'no']},
     {'key': 'CN_TRACKER', 'label': 'Tracker分流', 'desc': 'BT Tracker域名走非CN解析', 'values': ['yes', 'no']},
-    {'key': 'IPV6', 'label': 'IPv6模式', 'desc': 'IPv6处理策略', 'values': ['no', 'yes', 'only6', 'yes_only6']},
+    {'key': 'IPV6', 'label': 'IPv6模式', 'desc': 'no=禁用；yes=仅国内双栈；only6=仅 IPv6-only；yes_only6=国内双栈+国外 IPv6-only；raw=原样返回全部 AAAA', 'values': ['no', 'yes', 'only6', 'yes_only6', 'raw']},
     {'key': 'ADDINFO', 'label': '附加信息', 'desc': 'DNS响应中附加解析路径信息', 'values': ['yes', 'no']},
     {'key': 'SHUFFLE', 'label': 'IP随机排序', 'desc': '响应中的IP地址随机排序', 'values': ['no', 'yes', 'lite', 'trnc']},
     {'key': 'EXPIRED_FLUSH', 'label': '过期刷新', 'desc': '过期缓存主动刷新', 'values': ['yes', 'no']},
@@ -1564,6 +1564,12 @@ def route_test():
         'qtype': qtype,
         'matched_rule': find_matching_rule(ascii_domain),
     })
+    settings = read_env_conf()
+    settings.update(read_custom_env())
+    ipv6_mode = settings.get('IPV6', 'no')
+    result['ipv6_mode'] = ipv6_mode
+    if qtype == 'AAAA' and not result.get('answers') and ipv6_mode != 'raw':
+        result['notice'] = f'当前 IPv6 模式为 {ipv6_mode}，该模式可能主动过滤此域名的 AAAA；如需原样返回，请选择 raw'
     return jsonify(result)
 
 

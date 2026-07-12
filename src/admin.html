@@ -554,6 +554,7 @@ async function testRoute() {
   const routeLabel = result.route_label || result.route || '查询成功，但未捕获到分流路径';
   const matchedRule = result.matched_rule || {};
   const ruleText = matchedRule.rule ? `${matchedRule.source}: ${matchedRule.rule}` : matchedRule.source || '-';
+  const noticeHtml = result.notice ? `<div style="color:var(--warn);font-size:12px;margin-top:10px">${escHtml(result.notice)}</div>` : '';
   resultEl.innerHTML = `
     <div class="route-test-result">
       <div class="route-test-item route"><div class="key">实际分流路径</div><div class="value">${escHtml(routeLabel)}</div></div>
@@ -561,7 +562,7 @@ async function testRoute() {
       <div class="route-test-item"><div class="key">查询</div><div class="value">${escHtml(result.domain)} ${escHtml(result.qtype)}</div></div>
       <div class="route-test-item"><div class="key">响应状态 / 耗时</div><div class="value">${escHtml(result.rcode || '-')} · ${escHtml(String(result.elapsed_ms))} ms</div></div>
       <div class="route-test-item"><div class="key">响应结果</div><div class="value">${escHtml(result.answers_text || '-')}</div></div>
-    </div>`;
+    </div>${noticeHtml}`;
   loadQueryLog();
 }
 
